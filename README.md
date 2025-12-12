@@ -115,4 +115,4 @@ Code is licensed under a Creative Commons Attribution-ShareAlike 4.0 Internation
 
 [1] E. Gönültaş, E. Lei, J. Langerman, H. Huang, and C. Studer, "CSI-based multi-antenna and multi-point indoor positioning using probability fusion," *IEEE Trans. Wireless Commun.*, vol. 21, no. 4, pp. 2162–2176, 2021.
 
-[2] R. Wiesmayr, F. Zumegen, S. Taner, C. Dick, and C. Studer, "CSI-based user positioning, channel charting, and device classification with an NVIDIA 5G testbed," in *Asilomar Conf. Signals, Syst., Comput.*, Oct. 2025.
+[2] R. Wiesmayr, F. Zumegen, S. Taner, C. Dick, and C. Studer, "CSI-based user positioning, channel charting, and device classification with an NVIDIA 5G testbed," in *Asilomar Conf. Signals, Syst., Comput.*, Oct. 2025, arXiv preprint https://arxiv.org/abs/2512.10809
