@@ -7,20 +7,44 @@ grid_gran = None
 # epsilon: max. allowed offset of G@p' from x for solution p'. Depends on granularity of grid.
 epsilon = None
 
-def make_grid(positions):
+def make_grid(positions,non_square_area=False):
     global G
     global grid_gran
     global epsilon
 
-    # Number of grid points per one dimension
+    # Target number of grid points per dimension (used to determine spacing)
     K = 22
     
-    x = np.linspace(np.min(positions[:,0])-0.1, np.max(positions[:,0])+0.1, K)
-    y = np.linspace(np.min(positions[:,1])-0.1, np.max(positions[:,1])+0.1, K)
+    if non_square_area:
+        # If the area is non-square, we need to calculate the grid spacing based on the smaller range
+        # Calculate ranges with padding
+        x_min = np.min(positions[:,0]) - 0.1
+        x_max = np.max(positions[:,0]) + 0.1
+        y_min = np.min(positions[:,1]) - 0.1
+        y_max = np.max(positions[:,1]) + 0.1
+        
+        x_range = x_max - x_min
+        y_range = y_max - y_min
+        
+        # Use the smaller range to determine grid spacing, ensuring at least K points
+        # This ensures equal spacing in both dimensions
+        spacing = min(x_range, y_range) / (K - 1)
+        
+        # Calculate number of points needed for each dimension
+        K_x = int(np.ceil(x_range / spacing)) + 1
+        K_y = int(np.ceil(y_range / spacing)) + 1
+        
+        # Create grid with equal spacing
+        x = np.linspace(x_min, x_max, K_x)
+        y = np.linspace(y_min, y_max, K_y)
+    else:
+        # If the area is square, we can use the same grid spacing for both dimensions
+        x = np.linspace(np.min(positions[:,0])-0.1, np.max(positions[:,0])+0.1, K)
+        y = np.linspace(np.min(positions[:,1])-0.1, np.max(positions[:,1])+0.1, K)
+    
     xv, yv = np.meshgrid(x, y)
-
-    # A 2 by K^2 array of grid points
     G = np.concatenate((xv.reshape(1,-1),yv.reshape(1,-1)),axis=0)
+
     # Grid granularity for x and y axis
     grid_gran = np.array([[np.abs(x[1]-x[0])],[np.abs(y[1]-y[0])]])
 
@@ -82,3 +106,47 @@ def sub_samp_by_AP(H_original,UE_pos,timestamps,ap=0):
     UE_pos = UE_pos[non_zero_indices,:]
     timestamps = timestamps[non_zero_indices]
     return H, UE_pos, timestamps
+
+def moving_average_over_N(x: np.ndarray, m: int) -> np.ndarray:
+    """
+    Windowed average along the first axis (N) with edge handling.
+    
+    Input:
+        x : np.ndarray of shape (N, B, A, W)
+        m : window size (int). For each n, average values from a window
+            centered at n. At the edges the window is truncated to fit.
+            The mean is computed per (B, A, W) entry, i.e., independently for
+            each W index; only the N axis is averaged.
+
+    Output:
+        y : np.ndarray of shape (N, B, A, W)
+            y[n, ...] is the average over x[s:e, ...], where:
+              s = max(0, n - left)
+              e = min(N, n + right)
+            with left = m // 2 and right = m - left (so window length is m in the middle).
+    """
+    if m <= 1:
+        # No smoothing needed or invalid m; return a copy to match "write result to new array"
+        return x.copy()
+
+    N = x.shape[0]
+    left = m // 2
+    right = m - left  # ensures total window length m in the center (works for odd/even m)
+
+    # Cumulative sum along axis 0, padded with an initial zero slice for easy range sums
+    cs = np.cumsum(x, axis=0)
+    cs_pad = np.concatenate([np.zeros_like(x[:1]), cs], axis=0)  # shape (N+1, B, A, W)
+
+    # Vectorized start/end indices for each n (end is exclusive)
+    n_idx = np.arange(N)
+    starts = np.maximum(0, n_idx - left)
+    ends   = np.minimum(N, n_idx + right)
+
+    # Range sums via prefix sums: sum_{s:e} = cs_pad[e] - cs_pad[s]
+    sums = cs_pad[ends] - cs_pad[starts]  # shape (N, B, A, W)
+
+    # Window lengths (may be < m at edges)
+    counts = (ends - starts).astype(x.dtype)
+    y = sums / counts.reshape(-1, *([1] * (x.ndim - 1)))
+
+    return y

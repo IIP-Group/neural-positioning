@@ -2,19 +2,21 @@
 
 This codebase implements CSI-based user equipment (UE) positioning with supervised training, often referred to as *neural positioning*.
 
-This repository implements a supervised positioning system that uses channel-state information (CSI) from a 5G testbed to predict UE positions. The method applies the probability maps approach from [1] to train a neural network (NN) that outputs probability distributions over a spatial grid, which are then fused to estimate absolute UE positions.
+This repository implements a supervised positioning system that uses channel-state information (CSI) from a 5G or Wi-Fi testbed to predict UE positions. The method applies the probability maps approach from [1] to train a neural network (NN) that outputs probability distributions over a spatial grid, which are then fused to estimate absolute UE positions.
 
 ## Overview
 
-This implementation trains a NN to predict absolute UE positions based on CSI features extracted from the 5G uplink channel (PUSCH). The system uses:
+This implementation trains a neural network to predict absolute UE positions based on CSI features. The features are extracted from the 5G uplink channel (PUSCH) for 5G testbed data, or from the Legacy Long Training Fields (L-LTF) for Wi-Fi testbed data. The system uses:
 
-- **CSI Features**: Down-sampled OFDM-domain CSI absolute values computed from full-spectrum CSI estimates of all 273 physical resource blocks (PRBs). The subcarrier dimension is low-pass filtered and down-sampled by a factor of 12, and features are averaged over all three demodulation reference signal (DMRS) symbols in the same PUSCH slot. This results in 273 real-valued features per O-RU antenna. Features from all O-RUs and antennas are aggregated into one vector and scaled to unit-norm.
+- **CSI Features**:
+    - **CAEZ-5G**: Down-sampled OFDM-domain CSI absolute values computed from full-spectrum CSI estimates of all 273 physical resource blocks (PRBs). The subcarrier dimension is low-pass filtered and down-sampled by a factor of 12, and features are averaged over all three demodulation reference signal (DMRS) symbols in the same PUSCH slot. This results in 273 real-valued features per O-RU antenna. Features from all O-RUs and antennas are aggregated into one vector and scaled to unit-norm.
+    - **CAEZ-WIFI**: OFDM-domain CSI absolute values computed from CSI estimates of the 52 used subcarriers in IEEE 802.11a Wi-Fi. This results in 52 real-valued features per AP antenna. The CSI features are temporally smoothed using a moving-average filter over a window of 51 samples. The resulting features from all APs and antennas are aggregated into one vector and scaled to unit-norm.
 
 - **Neural Network Architecture**: A fully-connected (feedforward) multi-layer perceptron with a probability map output. Ground-truth position labels are first mapped to ground-truth probability maps in a preprocessing step prior to NN training.
 
 - **Training**: The NN is trained with binary cross-entropy loss (mean-reduction) computed between ground-truth probability map points and NN output probability map points. Training is performed for 50 epochs with an initial learning rate of $10^{-4}$ and a batch size of 10 samples. The Adam optimizer is used in combination with a learning rate scheduler that applies a step size decay of 0.1 after every 20 epochs.
 
-- **Dataset Split**: A CAEZ-5G (CAEZ stands for CSI Acquisition at ETH Zurich) dataset is randomly partitioned into training (80%) and testing (20%) samples. The last 500 samples, corresponding to a single connected sub-trajectory, are excluded from random partitioning and used only for testing to evaluate generalization capabilities. For further information and to download the CSI and WorldViz database files (tar.zstd files), visit [https://caez.ethz.ch](https://caez.ethz.ch).
+- **Dataset Split**: A CAEZ-5G (CAEZ stands for CSI Acquisition at ETH Zurich) or CAEZ-WIFI dataset is randomly partitioned into training (80%) and testing (20%) samples. Only for CAEZ-5G: The last 500 samples, corresponding to a single connected sub-trajectory, are excluded from random partitioning and used only for testing to evaluate generalization capabilities. For further information and to download the CSI and WorldViz database files (tar.zstd files), visit [https://caez.ethz.ch](https://caez.ethz.ch).
 
 ## Requirements
 
@@ -28,11 +30,14 @@ The code requires Python 3.x and the following packages:
 
 ## Usage
 
-### Step 1: Dataset Generation
+Download the raw CSI measurements and ground-truth position logs from [https://caez.ethz.ch](https://caez.ethz.ch). The dataset files are provided as compressed tar.zstd/tar.gz archives containing CSI data and WorldViz position logs.
 
-First, download the raw CSI measurements and ground-truth position logs from [https://caez.ethz.ch](https://caez.ethz.ch). The dataset files are provided as compressed tar.zstd archives containing CSI data and WorldViz position logs.
+This neural positioning implementation can be used with the CAEZ-5G datasets as well as the CAEZ-WIFI datasets. The usage varies slightly depending on whether a 5G dataset ([CAEZ-5G](#caez-5g)) or a Wi-Fi dataset ([CAEZ-WIFI](#caez-wifi)) is used.
 
-Then, generate the processed dataset:
+### CAEZ-5G
+#### Step 1: Dataset Generation
+
+Generate the processed dataset:
 
 ```bash
 python gen_dataset.py
@@ -51,7 +56,7 @@ This script:
 - Bounding box constraints for outdoor measurements
 - Number of O-RUs and antennas
 
-### Step 2: Training and Testing
+#### Step 2: Training and Testing
 
 Run the main training and evaluation script:
 
@@ -83,13 +88,77 @@ This script:
 - Training/validation loss curves
 - Results saved as `.npz` files
 
+### CAEZ-WIFI
+#### Step 1: Dataset Generation
+
+Generate the processed dataset:
+
+```bash
+python make_wifi_dataset.py
+```
+
+This script:
+- Loads ground-truth UE positions from WorldViz logs (`gt-positions.csv`)
+- Parses CSI data from the CAEZ-WIFI dataset (CSV and JSON format)
+- Assigns WorldViz position labels to CSI sample timestamps
+- Extracts and processes CSI features (absolute values and moving-average in time)
+- Removes samples at timestamps with zero-CSI (no measured CSI available)
+- Saves processed data as one `.npz` file
+
+**Configuration**: Edit the lines within the `Modify this` comment block to specify:
+- Input and output paths and file names
+- `window_len`: resolution of time grid into which measured CSI samples are grouped
+- CSI feature types and filtering methods
+
+#### Step 2: Training and Testing
+
+Run the main training and evaluation script:
+
+```bash
+python main_wifi-caez.py
+```
+
+This script:
+- Loads the preprocessed dataset
+- Generates probability maps for ground-truth positions
+- Trains the neural network
+- Evaluates on randomly partitioned test set
+- Generates plots and saves results
+
+**Configuration**: Edit the `config` dictionary at the top of `main_wifi-caez.py` to specify:
+- Dataset filenames (training and validation sets)
+- Learning rate and number of epochs
+- Network architecture type
+- Conflation method for fusing probability maps
+- Name of results directory (below `config` dictionary)
+
+**Command Line Arguments**: The script takes two command line arguments to specify:
+- Data path (path to the training and validation sets)
+- Results path (path to the results directory)
+
+**Output**: The script generates:
+- Trained model weights (`.torch` files)
+- Positioning error statistics and CDF plots
+- Visualization plots of test set positions and estimates
+- Training/validation loss curves
+- Results saved as `.npz` files
+
 ## File Structure
 
 ### Main Scripts
+
+#### CAEZ-5G specific
 - `gen_dataset.py`: Dataset generation and CSI feature extraction
 - `main_5g-caez.py`: Main training and evaluation script
 
+#### CAEZ-WIFI specific:
+- `make_wifi_dataset.py`: Dataset generation and CSI feature extraction
+- `main_wifi-caez.py`: Main training and evaluation script
+
 ### Supporting Modules
+
+Used for both, CAEZ-5G and CAEZ-WIFI.
+
 - `NN_models.py`: Neural network model definitions
 - `create_dataset.py`: Dataset classes for PyTorch
 - `feature_extraction.py`: CSI feature extraction functions
@@ -102,6 +171,7 @@ This script:
 ## Version History
 
 - **Version 0.1**: Simulator for CAEZ-5G-INDOOR and CAEZ-5G-OUTDOOR experiments in [2]
+- **Version 0.2**: Simulator for CAEZ-WIFI-INDOOR-LSHAPE experiment
 
 ## Citation
 
@@ -113,6 +183,6 @@ Code is licensed under a Creative Commons Attribution-ShareAlike 4.0 Internation
 
 ## References
 
-[1] E. Gönültaş, E. Lei, J. Langerman, H. Huang, and C. Studer, "CSI-based multi-antenna and multi-point indoor positioning using probability fusion," *IEEE Trans. Wireless Commun.*, vol. 21, no. 4, pp. 2162–2176, 2021.
+[1] E. Gönültaş, E. Lei, J. Langerman, H. Huang, and C. Studer, "CSI-based multi-antenna and multi-point indoor positioning using probability fusion," *IEEE Trans. Wireless Commun.*, vol. 21, no. 4, pp. 2162-2176, Sep. 2021.
 
 [2] R. Wiesmayr, F. Zumegen, S. Taner, C. Dick, and C. Studer, "CSI-based user positioning, channel charting, and device classification with an NVIDIA 5G testbed," in *Asilomar Conf. Signals, Syst., Comput.*, Oct. 2025, arXiv preprint https://arxiv.org/abs/2512.10809

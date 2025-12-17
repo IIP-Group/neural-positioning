@@ -116,7 +116,7 @@ class CombinedNetwork(nn.Module):
         return x
 
 class SupervisedModel():
-    def __init__(self,device,total_feature_size,nof_APs,config):
+    def __init__(self,device,total_feature_size,nof_APs,config,prob_map_size=484):
         # Parameters of the NN
         self.device = device
         self.X_size = int(total_feature_size/nof_APs)
@@ -136,10 +136,12 @@ class SupervisedModel():
             self.network = CombinedNetwork(nof_APs,self.X_size,device)
             self.criterion = self.mse
         elif config["architecture"] == "probability_NN":
-            self.layers = [self.X_size, 512, 512, 512, 512, 484] # 484 = K^2 grid points
+            self.layers = [self.X_size, 512, 512, 512, 512, prob_map_size]
             self.network = ProbabilityNetwork(self.layers, dropout_rate=config["dropout_rate"])
             self.network.to(self.device)
             self.criterion = nn.BCELoss(reduction='mean')
+        else:
+            raise ValueError(f"Invalid architecture: {config['architecture']}")
 
         self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.learning_rate) # define learning rate and momentum for Stochastic Gradient Descent (SGD) 
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, self.step_size_decay) # decays the learning rate of each parameter group by gamma every step_size epochs. Default gamma = 0.1

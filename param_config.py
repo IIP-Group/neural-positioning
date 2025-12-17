@@ -44,7 +44,7 @@ class Parameter:
 
         self.color_map = np.concatenate((color1, color2, color3), axis=-1)
 
-    def plot_scenario(self, passive=False, dimensions='2d',error_stats=None):
+    def plot_scenario(self, passive=False, dimensions='2d',error_stats=None,ap_pos=None):
         fig = plt.figure()
         if dimensions == '3d':
             ax = fig.add_subplot(projection='3d')
@@ -63,8 +63,9 @@ class Parameter:
             if passive:
                 ax.scatter(self.TX_pos[:, 0], self.TX_pos[:, 1], marker='+')
             
-            # uncomment to plot AP positions
-            # ax.scatter(self.AP_pos[:, 0], self.AP_pos[:, 1], marker='^')
+            # If ap_pos is provided, plot AP positions
+            if ap_pos is not None:
+                ax.scatter(ap_pos[:, 0], ap_pos[:, 1], marker='^')
 
             ax.set_xlabel('x [m]')
             ax.set_ylabel('y [m]')

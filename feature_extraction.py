@@ -47,7 +47,7 @@ def feature_extraction_probability_maps(H,
 
         if prob_maps_preloaded:
                 print("Loading pre-computed prob. maps ...")
-                data = np.load(data_path+'features_probMaps_'+dataset_name[8:-4]+'.npz')
+                data = np.load(data_path+'features_probMaps_'+dataset_name[:-4]+'.npz')
                 prob_map = data["prob_map"]
                 prob_map_var = data["prob_map_var"]
                 K = 1 # dummy value
@@ -84,7 +84,7 @@ def feature_extraction_probability_maps(H,
                         prob_map[:,item], prob_map_var[:,item] = hp.learn_ref_probability_map(UE_pos[item,:].reshape(2,1),K)
 
         if not prob_maps_preloaded:
-                np.savez(data_path+'features_probMaps_'+dataset_name[8:-4]+'.npz', feat_vec=feature_vector, prob_map=prob_map, prob_map_var=prob_map_var)
+                np.savez(data_path+'features_probMaps_'+dataset_name[:-4]+'.npz', feat_vec=feature_vector, prob_map=prob_map, prob_map_var=prob_map_var)
                 print('features and probability maps saved.')
         
         # transpose prob maps; training needs this
